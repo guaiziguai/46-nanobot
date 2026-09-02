@@ -14,21 +14,18 @@ from .base import BaseChannel
 
 class ChannelManager:
     def __init__(self, bus: MessageBus,channels: list[BaseChannel]) -> None:
-
         self.bus = bus
         self.channels = {c.name: c for c in channels}
-        self.tasks: list[asyncio.Task[None]] = []
+        self._tasks: list[asyncio.Task[None]] = []
         self._channel_tasks: list[asyncio.Task[None]] = []
-
-
-        async def start(self) -> None:
+    async def start(self) -> None:
             for channel in self.channels.values():
                 task = asyncio.create_task(channel.start(), name=f"channel:{channel.name}")
                 self._channel_tasks.append(task)
                 self._tasks.append(task)
             self._tasks.append(asyncio.create_task(self._dispatch_outbound()))
 
-        async def stop(self) -> None:
+    async def stop(self) -> None:
             for channel in self.channels.values():
                 await channel.stop()
             for task in self._tasks:
@@ -37,7 +34,7 @@ class ChannelManager:
                 await asyncio.gather(*self._tasks, return_exceptions=True)
 
         
-        async def _dispatch_outbound(self) -> None:
+    async def _dispatch_outbound(self) -> None:
             while True:
                 msg = await self.bus.consume_outbound()
                 channel = self.channels.get(msg.channel)
@@ -50,7 +47,7 @@ class ChannelManager:
                 else:
                     await channel.send(msg.session_id, msg.content, msg.metadata)
 
-        async def wait_until_all_stopped(self) -> None:
+    async def wait_until_all_stopped(self) -> None:
             """阻塞直到所有 channel 都停止运行（比如用户在 console 里输入了 /exit）。"""
             if self._channel_tasks:
                 await asyncio.gather(*self._channel_tasks)

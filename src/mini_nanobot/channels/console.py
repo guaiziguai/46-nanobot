@@ -31,7 +31,7 @@ class ConsoleChannel(BaseChannel):
 
     def __init__(self, bus: MessageBus) -> None:
         super().__init__(bus)
-        self.session_id = str(uuid.uuid4()).hex
+        self.session_id = str(uuid.uuid4().hex)
     
 
 

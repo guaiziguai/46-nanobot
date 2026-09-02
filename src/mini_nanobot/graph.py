@@ -25,7 +25,7 @@ def build_agent(cfg: AppConfig| None = None):
     llm = build_llm(cfg)
 
     return create_agent(
-        llm=llm,
+        model=llm,
         tools=BASIC_TOOLS,
         system_prompt=build_system_prompt(),
         name = "mini-nanobot",

@@ -44,8 +44,8 @@ class MessageBus:
     """两个队列：入站和出站。"""
 
     def __init__(self) -> None:
-        self.inbound_queue: asyncio.Queue[InboundMessage] = asyncio.Queue()
-        self.outbound_queue: asyncio.Queue[OutboundMessage] = asyncio.Queue()
+        self.inbound: asyncio.Queue[InboundMessage] = asyncio.Queue()
+        self.outbound: asyncio.Queue[OutboundMessage] = asyncio.Queue()
 
     async def publish_inbound(self, msg: InboundMessage) -> None:
         await self.inbound.put(msg)
