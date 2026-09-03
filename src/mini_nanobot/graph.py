@@ -10,6 +10,8 @@ from .tools import BASIC_TOOLS
 from contextlib import asynccontextmanager  #异步的上下文管理器
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver #异步的sqlite检查点保存器
 
+from .state import AgentContext, AgentState
+
 def build_llm(cfg: AppConfig) -> ChatOpenAI:
     return ChatOpenAI(
         api_key=cfg.provider.api_key,
@@ -37,6 +39,8 @@ async def create_app(cfg: AppConfig):
             system_prompt=build_system_prompt(),
             checkpointer=saver,
             name="react_agent",
+            state_schema=AgentState,
+            context_schema=AgentContext,
         )
         yield graph
 

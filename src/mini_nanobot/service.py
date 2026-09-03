@@ -5,6 +5,7 @@ import logging
 from langchain_core.messages import HumanMessage
 
 from .bus import InboundMessage, MessageBus, OutboundMessage
+from .state import AgentContext
 
 logger = logging.getLogger("mini_nanobot")
 
