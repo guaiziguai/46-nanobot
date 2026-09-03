@@ -22,8 +22,8 @@ async def _main() -> None:
     console = ConsoleChannel(bus, sessions)
     manager = ChannelManager(bus, [console])
     service = AgentService(bus)
-    async with create_app(cfg) as graph:
-        service = AgentService(bus, graph)
+    async with create_app(cfg) as runtime:
+        service = AgentService(bus, runtime)
         service_task = asyncio.create_task(service.run())
         await manager.start()
         try:

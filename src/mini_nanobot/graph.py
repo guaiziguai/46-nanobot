@@ -13,6 +13,10 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver #异步的sqlite检
 from .state import AgentContext, AgentState
 from .middleware import build_agent_middleware
 
+from .memory import FileMemoryBackend,MemoryBackend
+
+from dataclasses import dataclass
+
 def build_llm(cfg: AppConfig) -> ChatOpenAI:
     return ChatOpenAI(
         api_key=cfg.provider.api_key,
@@ -25,9 +29,17 @@ def build_llm(cfg: AppConfig) -> ChatOpenAI:
 
 
 
+@dataclass
+class AppRuntime:
+    graph: object
+    llm: object
+    memory: MemoryBackend
+
 @asynccontextmanager
 async def create_app(cfg: AppConfig):
     llm = build_llm(cfg)
+    memory = MemoryBackend(memory_dir=cfg.memory_dir)
+    await memory.initialize()
     cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
     async with AsyncSqliteSaver.from_conn_string(str(cfg.db_path)) as saver:
         # create_agent 通常要在 compile 时带 checkpointer
@@ -44,7 +56,7 @@ async def create_app(cfg: AppConfig):
             context_schema=AgentContext,
             middleware=build_agent_middleware(llm, context_window=cfg.context_window, consolidation_ratio=cfg.consolidation_ratio, max_model_calls=cfg.max_model_calls),
         )
-        yield graph
+        yield AppRuntime(graph=graph, llm=llm, memory=memory)
 
 
 

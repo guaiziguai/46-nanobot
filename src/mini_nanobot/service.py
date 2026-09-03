@@ -6,14 +6,15 @@ from langchain_core.messages import HumanMessage
 
 from .bus import InboundMessage, MessageBus, OutboundMessage
 from .state import AgentContext
+from .graph import AppRuntime
 
 logger = logging.getLogger("mini_nanobot")
 
 
 class AgentService:
-    def __init__(self, bus: MessageBus, graph) -> None:
+    def __init__(self, bus: MessageBus, runtime:AppRuntime) -> None:
         self.bus = bus
-        self.agent = graph
+        self.runtime = runtime
 
     async def run(self) -> None:
         while True:
@@ -29,7 +30,7 @@ class AgentService:
         result = await self.agent.ainvoke(
             {"messages": [HumanMessage(content=msg.content)]},
             config={"configurable": {"thread_id": msg.session_id}},
-            context=AgentContext(session_id=msg.session_id, memory=self.memory),
+            context=AgentContext(session_id=msg.session_id, memory=self.runtime.memory),
         )
         content = str(result["messages"][-1].content)
         await self._reply(msg, content)
