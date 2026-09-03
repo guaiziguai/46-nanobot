@@ -8,24 +8,30 @@ from .bus import MessageBus
 from .channels import ChannelManager, ConsoleChannel
 from .config import ConfigurationError, load_config
 from .service import AgentService
+from .session import SessionManager
+from .graph import create_app
 
 logging.basicConfig(level=logging.WARNING)
 
 
 async def _main() -> None:
-    load_config()  # 提前校验 .env
+    cfg = load_config()  # 提前校验 .env
+    cfg.ensure_dirs()
     bus = MessageBus()
-    console = ConsoleChannel(bus)
+    sessions = SessionManager(data_dir=cfg.data_dir)
+    console = ConsoleChannel(bus, sessions)
     manager = ChannelManager(bus, [console])
     service = AgentService(bus)
-    service_task = asyncio.create_task(service.run())
-    await manager.start()
-    try:
-        await manager.wait_until_all_stopped()
-    finally:
-        service_task.cancel()
-        await manager.stop()
-        await asyncio.gather(service_task, return_exceptions=True)
+    async with create_app(cfg) as graph:
+        service = AgentService(bus, graph)
+        service_task = asyncio.create_task(service.run())
+        await manager.start()
+        try:
+            await manager.wait_until_all_stopped()
+        finally:
+            service_task.cancel()
+            await manager.stop()
+            await asyncio.gather(service_task, return_exceptions=True)
 
 
 

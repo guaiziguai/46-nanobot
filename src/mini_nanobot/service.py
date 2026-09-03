@@ -5,15 +5,14 @@ import logging
 from langchain_core.messages import HumanMessage
 
 from .bus import InboundMessage, MessageBus, OutboundMessage
-from .graph import build_agent
 
 logger = logging.getLogger("mini_nanobot")
 
 
 class AgentService:
-    def __init__(self, bus: MessageBus) -> None:
+    def __init__(self, bus: MessageBus, graph) -> None:
         self.bus = bus
-        self.agent = build_agent()
+        self.agent = graph
 
     async def run(self) -> None:
         while True:

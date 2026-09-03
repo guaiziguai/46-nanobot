@@ -9,6 +9,7 @@ from rich.markdown import Markdown
 
 from ..bus import MessageBus
 from .base import BaseChannel
+from ..session import SessionManager
 
 _console = RichConsole()
 
@@ -29,9 +30,25 @@ class ConsoleChannel(BaseChannel):
     name = "console"
     supports_streaming = False
 
-    def __init__(self, bus: MessageBus) -> None:
+    def __init__(self, bus: MessageBus, sessions: SessionManager) -> None:
         super().__init__(bus)
-        self.session_id = str(uuid.uuid4().hex)
+        self.sessions = sessions
+        self.session_id = ""
+        self._stream_started: set[str] = set()
+
+    def _restore_active_session(self) -> None:
+        """恢复持久化的活动会话；首次启动时创建一个。"""
+        active = self.sessions.get_active()
+        if active is None:
+            active = self.sessions.create("控制台会话")
+        self.sessions.activate(active.thread_id)
+        self.session_id = active.thread_id
+
+    def _create_session(self) -> None:
+        """创建并激活一个可持久化的新会话。"""
+        session = self.sessions.create("控制台会话")
+        self.sessions.activate(session.thread_id)
+        self.session_id = session.thread_id
     
 
 
@@ -62,7 +79,7 @@ class ConsoleChannel(BaseChannel):
             elif line == "/help":
                 _console.print(HELP_TEXT)
             if line == "/new":
-                self.session_id = uuid.uuid4().hex
+                self.session_id = self._create_session()
                 _console.print("[yellow]已开启新会话[/yellow]\n")
                 continue
             await self._handle_message(self.session_id, line)
