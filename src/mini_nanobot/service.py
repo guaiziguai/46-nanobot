@@ -29,6 +29,7 @@ class AgentService:
         result = await self.agent.ainvoke(
             {"messages": [HumanMessage(content=msg.content)]},
             config={"configurable": {"thread_id": msg.session_id}},
+            context=AgentContext(session_id=msg.session_id, memory=self.memory),
         )
         content = str(result["messages"][-1].content)
         await self._reply(msg, content)
