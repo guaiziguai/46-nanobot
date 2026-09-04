@@ -1,21 +1,20 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
+
 from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-from .config import AppConfig, load_config
-from .prompts import build_system_prompt
-from .tools import BASIC_TOOLS
-
-from contextlib import asynccontextmanager  #异步的上下文管理器
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver #异步的sqlite检查点保存器
-
-from .state import AgentContext, AgentState
+from .config import AppConfig
+from .memory import FileMemoryBackend, MemoryBackend
 from .middleware import build_agent_middleware
+from .session import SessionManager
+from .state import AgentContext, AgentState
+from .subagents import SubagentManager
+from .tools import BASIC_TOOLS, make_spawn_tool
 
-from .memory import FileMemoryBackend,MemoryBackend
-
-from dataclasses import dataclass
 
 def build_llm(cfg: AppConfig) -> ChatOpenAI:
     return ChatOpenAI(
@@ -34,29 +33,52 @@ class AppRuntime:
     graph: object
     llm: object
     memory: MemoryBackend
+    sessions: SessionManager
+    subagents: SubagentManager
+    dream_auto_threshold: int  #未巩固条数 = len(history) - dream_cursor
 
 @asynccontextmanager
 async def create_app(cfg: AppConfig):
     llm = build_llm(cfg)
-    memory = MemoryBackend(memory_dir=cfg.memory_dir)
+    memory = FileMemoryBackend(cfg.memory_dir)
     await memory.initialize()
+    sessions = SessionManager(data_dir=cfg.workspace_dir)
+
     cfg.db_path.parent.mkdir(parents=True, exist_ok=True)
     async with AsyncSqliteSaver.from_conn_string(str(cfg.db_path)) as saver:
-        # create_agent 通常要在 compile 时带 checkpointer
-        # 按你安装的 langchain 版本：
-        # - 有的版本 create_agent(..., checkpointer=saver)
-        # - 有的返回未编译图，再 .compile(checkpointer=saver)
+        subagents = SubagentManager(
+            llm,
+            BASIC_TOOLS,
+            sessions,
+            max_concurrent=cfg.max_concurrent_subagents,
+            timeout=cfg.subagent_timeout_seconds,
+        )
+        spawn_tool = make_spawn_tool(subagents)
         graph = create_agent(
-            model=llm,
-            tools=BASIC_TOOLS,
-            system_prompt=build_system_prompt(),
-            checkpointer=saver,
-            name="react_agent",
+            llm,
+            tools=[*BASIC_TOOLS, spawn_tool],
+            middleware=build_agent_middleware(
+                llm,
+                context_window=cfg.context_window,
+                consolidation_ratio=cfg.consolidation_ratio,
+                max_model_calls=cfg.max_iterations,
+            ),
             state_schema=AgentState,
             context_schema=AgentContext,
-            middleware=build_agent_middleware(llm, context_window=cfg.context_window, consolidation_ratio=cfg.consolidation_ratio, max_model_calls=cfg.max_model_calls),
+            checkpointer=saver,
+            name="react_agent",
         )
-        yield AppRuntime(graph=graph, llm=llm, memory=memory)
+        try:
+            yield AppRuntime(
+                graph=graph,
+                llm=llm,
+                memory=memory,
+                sessions=sessions,
+                subagents=subagents,
+                dream_auto_threshold=cfg.dream_auto_threshold,
+            )
+        finally:
+            await subagents.close()
 
 
 

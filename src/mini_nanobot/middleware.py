@@ -119,41 +119,48 @@ def _should_retry_model(exc: Exception) -> bool:
     return classify_error(exc, attempt=0).should_retry
 
 
-# class PendingInjectionMiddleware(AgentMiddleware[AgentState, AgentContext]):
-#     """在每次模型调用前注入用户补充或后台 Subagent 结果。"""
+def _event_value(event: Any, key: str, default: Any = "") -> Any:
+    """同时读取真实 PendingEvent 和测试使用的 dict。"""
+    if isinstance(event, dict):
+        return event.get(key, default)
+    return getattr(event, key, default)
 
-#     state_schema = AgentState
 
-#     async def abefore_model(
-#         self,
-#         state: AgentState,
-#         runtime,
-#     ) -> dict[str, Any] | None:
-#         context = runtime.context
-#         if context.pending is None:
-#             return None
+class PendingInjectionMiddleware(AgentMiddleware[AgentState, AgentContext]):
+    """在每次模型调用前注入运行中补充消息或 Subagent 结果。"""
 
-#         events = await context.pending.drain_pending(context.session_id, limit=3)
-#         if not events:
-#             return None
+    state_schema = AgentState
 
-#         messages: list[HumanMessage] = []
-#         for event in events:
-#             event_type = str(_event_value(event, "type", "external"))
-#             content = str(_event_value(event, "content", "")).strip()
-#             event_id = str(_event_value(event, "event_id", ""))
-#             if not content:
-#                 continue
-#             messages.append(
-#                 HumanMessage(
-#                     content=f"[运行时注入：{event_type}]\n{content}",
-#                     additional_kwargs={
-#                         "injected_event": event_type,
-#                         "event_id": event_id,
-#                     },
-#                 )
-#             )
-#         return {"messages": messages} if messages else None
+    async def abefore_model(
+        self,
+        state: AgentState,
+        runtime,
+    ) -> dict[str, Any] | None:
+        context = runtime.context
+        if context.pending is None:
+            return None
+
+        events = await context.pending.drain_pending(context.session_id, limit=3)
+        if not events:
+            return None
+
+        messages: list[HumanMessage] = []
+        for event in events:
+            event_type = str(_event_value(event, "type", "external"))
+            content = str(_event_value(event, "content", "")).strip()
+            event_id = str(_event_value(event, "event_id", ""))
+            if not content:
+                continue
+            messages.append(
+                HumanMessage(
+                    content=f"[运行时注入：{event_type}]\n{content}",
+                    additional_kwargs={
+                        "injected_event": event_type,
+                        "event_id": event_id,
+                    },
+                )
+            )
+        return {"messages": messages} if messages else None
 
 
 def build_agent_middleware(
@@ -181,7 +188,7 @@ def build_agent_middleware(
 
     middleware: list[AgentMiddleware] = [
         runtime_prompt,
-        # PendingInjectionMiddleware(),
+        PendingInjectionMiddleware(),
         ModelRetryMiddleware(
             max_retries=2,
             retry_on=_should_retry_model,

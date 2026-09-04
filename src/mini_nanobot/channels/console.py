@@ -10,6 +10,7 @@ from rich.markdown import Markdown
 from ..bus import MessageBus
 from .base import BaseChannel
 from ..session import SessionManager
+from ..memory.dream import run_dream
 
 _console = RichConsole()
 
